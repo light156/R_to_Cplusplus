@@ -248,16 +248,16 @@ void taCOJO::read_bedfile(string bedFile, int indi_num, vector<string> &bimSNP, 
 void taCOJO::process_bedfile(MatrixXd &X_cohort, int indi_num, unordered_map<string, vector<char>> &bedData, 
     unordered_map<string, double> &bedSNPavg, unordered_map<string, double> &bedSNPstd) 
 {
-    X_cohort.resize(indi_num, commonSNP_num);
+    X_cohort.resize(commonSNP_num, indi_num);
 
     # pragma omp parallel for 
-    for (int col = 0; col < commonSNP_num; col++) {
-        string SNP = commonSNP_ordered[col];
-        for (int row = 0; row < indi_num; row++) {
-            if (bedData[SNP][row] == 10) 
+    for (int row = 0; row < commonSNP_num; row++) {
+        string SNP = commonSNP_ordered[row];
+        for (int col = 0; col < indi_num; col++) {
+            if (bedData[SNP][col] == 10) 
                 X_cohort(row, col) = 0;
             else
-                X_cohort(row, col) = (double(bedData[SNP][row])-bedSNPavg[SNP])/bedSNPstd[SNP];
+                X_cohort(row, col) = (double(bedData[SNP][col])-bedSNPavg[SNP])/bedSNPstd[SNP];
         }
     };
 
@@ -267,47 +267,58 @@ void taCOJO::process_bedfile(MatrixXd &X_cohort, int indi_num, unordered_map<str
 }
 
 
+double taCOJO::median(const ArrayXd &eigen_vector) 
+{
+    if (eigen_vector.size()==1) 
+        return eigen_vector(0);
+
+    int size = eigen_vector.size();
+    vector<double> b(eigen_vector.data(), eigen_vector.data() + size);
+    double b_median; 
+
+    stable_sort(b.begin(), b.end());
+    if (size%2==1)
+        b_median = b[(size-1)/2];
+    else 
+        b_median = (b[size/2]+b[size/2-1])/2;
+
+    vector<double>().swap(b);
+    return b_median;
+}
+
+
 void taCOJO::process_cojofile(ArrayXXd &sumstat, double &Vp, unordered_map<string, ItemCojo> &cojoData) 
 {   
-    sumstat.resize(7, commonSNP_num);
-    // 0:freq, 1:b, 2:se2, 3:p, 4:N, 5:V, 6:D
+    sumstat.resize(commonSNP_num, 7);
+    // col 0:b, 1:se2, 2:p, 3:freq, 4:N, 5:V, 6:D 
 
-    vector<double> Vp_gcta_list(commonSNP_num);
     # pragma omp parallel for 
     for (int i = 0; i < commonSNP_num; i++) {
         ItemCojo item = cojoData[commonSNP_ordered[i]];
 
-        sumstat(0, i) = item.freq;
-        sumstat(1, i) = item.b;
-        sumstat(2, i) = item.se*item.se;
-        sumstat(3, i) = item.p;
-        sumstat(4, i) = item.N;
-
-        Vp_gcta_list[i] = 2*item.freq*(1-item.freq)*item.N * (item.se*item.se+item.b*item.b/(item.N-1));
+        sumstat(i, 0) = item.b;
+        sumstat(i, 1) = item.se*item.se;
+        sumstat(i, 2) = item.p;
+        sumstat(i, 3) = item.freq;
+        sumstat(i, 4) = item.N;
     };
+    
+    sumstat.col(5) = sumstat.col(3) * (1-sumstat.col(3)) * 2;
+    ArrayXd Vp_gcta_list = sumstat.col(5) * sumstat.col(4) * (sumstat.col(1) + square(sumstat.col(0))/(sumstat.col(4)-1));
+    Vp = median(Vp_gcta_list);
 
-    double Vp_gcta = CommFunc::median(Vp_gcta_list);
+    sumstat.col(4) = (Vp - sumstat.col(5)*square(sumstat.col(0))) / (sumstat.col(5)*sumstat.col(1)) + 1;
+    sumstat.col(6) = sumstat.col(4) * sumstat.col(5);
 
-    sumstat.row(5) = sumstat.row(0) * (1-sumstat.row(0)) * 2;
-    sumstat.row(4) = (Vp_gcta-sumstat.row(5)*sumstat.row(1).square()) / (sumstat.row(5)*sumstat.row(2)) + 1;
-    sumstat.row(6) = sumstat.row(4) * sumstat.row(5);
-
-    # pragma omp parallel for 
-    for (int i = 0; i < commonSNP_num; i++) {
-        Vp_gcta_list[i] = 2*sumstat(0, i)*(1-sumstat(0, i))*sumstat(4, i) * (sumstat(2, i) + sumstat(1, i)*sumstat(1, i)/(sumstat(4, i)-1));
-    };
-
-    Vp = CommFunc::median(Vp_gcta_list);
+    Vp_gcta_list = sumstat.col(6) * (sumstat.col(1) + square(sumstat.col(0))/(sumstat.col(4)-1));
+    Vp = median(Vp_gcta_list);
     
     unordered_map<string, ItemCojo>().swap(cojoData);
-    vector<double>().swap(Vp_gcta_list);
 }
 
 
 void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, string PLINK2) 
 {
-    int indi_num1, indi_num2;
-
     // read cojo and PLINK files 
     read_bimfile(PLINK1+".bim", true);
     read_bimfile(PLINK2+".bim", false);
@@ -350,4 +361,6 @@ void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, strin
 
     process_cojofile(sumstat1, Vp1, cojoData1);
     process_cojofile(sumstat2, Vp2, cojoData2);
+    
+    cout << fixed << setprecision(10) << Vp1 << " " << Vp2 << endl;
 }
