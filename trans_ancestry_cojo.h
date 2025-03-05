@@ -68,11 +68,11 @@ public:
 
     void initialize_candidate_and_screened_matrices();
     void calc_colinear_SNP(const ArrayXXd &X, ArrayXXd &X_candidate, ArrayXXd &r);
-    void remove_SNP(ArrayXXd &matrix);
-    void remove_SNP(ArrayXXd &matrix, int rowToRemove);
     void prepare_sumstat(const ArrayXXd &sumstat, ArrayXXd &sumstat_candidate, ArrayXXd &sumstat_screened);
     
+    void remove_SNP(ArrayXXd &matrix, int rowToRemove);
     void remove_max_SNP_from_matrices(bool if_both_cohorts);
+    
     void inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2, 
         const ArrayXd &se2_cohort1, const ArrayXd &se2_cohort2, ArrayXXd &merge);
     void calc_conditional_effects(const ArrayXXd &r, const ArrayXXd &sumstat_candidate, 
@@ -84,8 +84,9 @@ public: // all necessary information and data for calculation
     int indi_num1, indi_num2, commonSNP_num, max_SNP_index;
     vector<string> commonSNP_ordered;
     unordered_map<string, ItemBim> bimData;
-
-    set<int> candidate_SNP, backward_removed_SNP, all_excluded_SNP;
+    
+    vector<int> candidate_SNP;
+    set<int> backward_removed_SNP, all_excluded_SNP;
     vector<int> screened_SNP_original_indices;
 
     ArrayXXd X1, X2, X1_candidate, X2_candidate;
@@ -106,7 +107,7 @@ public: // all necessary information and data for calculation
 // hyperparameters for users to predefine and adjust
 public: 
     double threshold;
-    double colinearity_threshold, colinearity_threshold_sqrt, iter_colinearity_threshold;
+    double colinearity_threshold, iter_colinearity_threshold;
 
     double R2_incremental_threshold;
     double R2_incremental_threshold_backwards;
