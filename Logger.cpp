@@ -133,7 +133,7 @@ int Logger::precision(){
 }
 
 void Logger::i(int level, const string& message, const string& title){
-    string head = title.empty() ? "" : (title + " ");
+    string head = title.empty() ? "Info: " : (title + " ");
     m_pThis->Log(level, PROMPT, head, message);
 }
 
