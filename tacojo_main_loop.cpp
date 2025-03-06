@@ -79,9 +79,7 @@ void taCOJO::initialize_candidate_and_screened_matrices()
     set<int>().swap(all_excluded_SNP);
     calc_colinear_SNP(X1, X1_candidate, r1);
     calc_colinear_SNP(X2, X2_candidate, r2);
-    
     all_excluded_SNP.insert(backward_removed_SNP.begin(), backward_removed_SNP.end());
-    cout << "Number of excluded SNPs: " << all_excluded_SNP.size() << endl;
 
     // remove the excluded rows in r and sumstat matrices
     for (auto riter = all_excluded_SNP.rbegin(); riter != all_excluded_SNP.rend(); riter++) {
@@ -157,7 +155,7 @@ bool taCOJO::calc_joint_effects(ArrayXXd &sumstat_candidate, const ArrayXXd &sum
 }
 
 
-void taCOJO::remove_max_SNP_from_matrices(bool if_both_cohorts) 
+void taCOJO::remove_max_SNP_from_matrices(bool both_cohorts) 
 {
     if (sumstat_merge.rows() <= 1) {
         max_SNP_index = -1;
@@ -174,7 +172,7 @@ void taCOJO::remove_max_SNP_from_matrices(bool if_both_cohorts)
     remove_SNP(sumstat1_candidate, M);
     remove_SNP(X1_candidate, M);
 
-    if (if_both_cohorts) {
+    if (both_cohorts) {
         remove_SNP(sumstat2_screened, max_SNP_index);
         remove_SNP(r2, max_SNP_index);
         remove_SNP(sumstat2_candidate, M);
@@ -182,6 +180,22 @@ void taCOJO::remove_max_SNP_from_matrices(bool if_both_cohorts)
     }
 
     sumstat_merge.col(2).maxCoeff(&max_SNP_index);
+}
+
+
+void taCOJO::save_file(string bimfile) {
+    ofstream Bim(bimfile.c_str());
+    if (!Bim) LOGGER.e(0, "cannot open the file [" + bimfile + "] to write.");
+    LOGGER << "Writing PLINK BIM file to [" + bimfile + "] ..." << endl;
+
+    ItemBim temp_item;
+
+    for (auto iter=commonSNP.begin(); iter!=commonSNP.end(); iter++) {
+        temp_item = bimData[*iter]; 
+        Bim << *iter << "\t" << temp_item.A1 << "\t" << temp_item.A2 << endl;
+    }
+
+    Bim.close();
 }
 
 
@@ -210,7 +224,7 @@ void taCOJO::main_loop()
     bool NA_flag = false, loop_break_indicator = false;
     int iter_num = 0;
 
-    while (!loop_break_indicator && iter_num<max_iter_num) {
+    while (!loop_break_indicator && iter_num<20) {
         
         initialize_candidate_and_screened_matrices();
 
@@ -252,7 +266,7 @@ void taCOJO::main_loop()
                 
             inverse_var_meta(beta1, beta2, beta_var1, beta_var2, new_model_joint);
             
-            if ((R2_cohort1 < (1+R2_incremental_threshold)*previous_R2_cohort1) && (R2_cohort2 || (1+R2_incremental_threshold)*previous_R2_cohort2)) {
+            if ((R2_cohort1 < (1+R2_incremental_threshold)*previous_R2_cohort1) || (R2_cohort2 < (1+R2_incremental_threshold)*previous_R2_cohort2)) {
                 LOGGER.w(0, "R2 increment unsatisfactory, searching next SNP");
                 remove_max_SNP_from_matrices(true);
                 continue;
@@ -266,8 +280,8 @@ void taCOJO::main_loop()
                 R1_inv_pre = R1_inv_post;
                 R2_inv_pre = R2_inv_post;
 
-                cout << "Added R vector cohort 1: " << r1.row(max_SNP_index) << endl;
-                cout << "Added R vector cohort 2: " << r2.row(max_SNP_index) << endl;
+                // cout << "Added R vector cohort 1: " << r1.row(max_SNP_index) << endl;
+                // cout << "Added R vector cohort 2: " << r2.row(max_SNP_index) << endl;
 
                 cout << "Added diagnoal value cohort 1: " << R1_inv_post(R1_inv_post.rows()-1, R1_inv_post.cols()-1) << endl;
                 cout << "Added diagnoal value cohort 2: " << R2_inv_post(R2_inv_post.rows()-1, R2_inv_post.cols()-1) << endl;
@@ -294,4 +308,10 @@ void taCOJO::main_loop()
         cout << "iter " << iter_num << " finished" << endl;
         cout << "--------------------------------" << endl;
     }
+
+    inverse_var_meta(output_b_cohort1, output_b_cohort2, output_se2_cohort1, output_se2_cohort2, sumstat_merge);
+    cout << "bJ.ma: " << sumstat_merge.col(0).transpose() << endl;
+    cout << "seJ.ma: " << sqrt(sumstat_merge.col(1)).transpose() << endl;
+    cout << "zJ: " << (sumstat_merge.col(0)/sqrt(sumstat_merge.col(1))).transpose() << endl;
+    cout << "pJ: " << scientific << sumstat_merge.col(3).transpose() << endl;
 }

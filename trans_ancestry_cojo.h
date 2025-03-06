@@ -44,23 +44,20 @@ public:
 
 // Step 1: read files and prepare matrices and vectors for calculation
 public:
-    void read_cojofile(string cojoFile, unordered_map<string, ItemCojo> &cojoData);
+    void read_cojofile(string cojoFile, bool isFirst);
     void read_bimfile(string bimFile, bool isFirst);
     void read_famfile(string famFile, int &indi_num);
-    void read_bedfile(string bedFile, int indi_num, vector<string> &bimSNP, unordered_map<string, vector<char>> &bedData, 
-        unordered_map<string, double> &bedSNPavg, unordered_map<string, double> &bedSNPstd);
-    void process_bedfile(ArrayXXd &X, int indi_num, unordered_map<string, vector<char>> &bedData, 
-        unordered_map<string, double> &bedSNPavg, unordered_map<string, double> &bedSNPstd);    
-    double process_cojofile(ArrayXXd &sumstat, unordered_map<string, ItemCojo> &cojoData);
+    void read_bedfile(string bedFile, int indi_num, bool isFirst, 
+        vector<string> &bimSNP, unordered_map<string, vector<double>> &bedData);
+    double generate_sumstat_matrix(ArrayXXd &sumstat, unordered_map<string, ItemCojo> &cojoData);
     double median(const ArrayXd &vector);
+    void save_file(string filepath); 
 
 private: // memory all freed after Step 1
     unordered_map<string, ItemCojo> cojoData1, cojoData2;    
-    unordered_map<string, vector<char>> bedData1, bedData2;
-    unordered_map<string, double> bedSNPavg1, bedSNPstd1, bedSNPavg2, bedSNPstd2;
+    unordered_map<string, vector<double>> bedData1, bedData2;
     vector<string> bimSNP1, bimSNP2;
     unordered_set<string> commonSNP;
-
 
 // Step 2: prepare matrices and vectors for calculation
 public:
@@ -71,7 +68,7 @@ public:
     void prepare_sumstat(const ArrayXXd &sumstat, ArrayXXd &sumstat_candidate, ArrayXXd &sumstat_screened);
     
     void remove_SNP(ArrayXXd &matrix, int rowToRemove);
-    void remove_max_SNP_from_matrices(bool if_both_cohorts);
+    void remove_max_SNP_from_matrices(bool both_cohorts);
     
     void inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2, 
         const ArrayXd &se2_cohort1, const ArrayXd &se2_cohort2, ArrayXXd &merge);
