@@ -242,14 +242,18 @@ void taCOJO::read_bedfile(string bedFile, int indi_num, bool isFirst,
         }
         
         if (!flag_all_NA) {
+            // fill NA with 0
             SNP_avg = SNP_sum/not_NA_indi_num;
             SNP_std = sqrt((SNP_square_sum-SNP_avg*SNP_avg*not_NA_indi_num)/(indi_num-1));
+            
+            # pragma omp parallel for 
             for (i = 0; i < indi_num; i++) {
                 if (single_SNP_temp[i] > 5) 
                     single_SNP_temp[i] = 0;
                 else
                     single_SNP_temp[i] = (single_SNP_temp[i]-SNP_avg)/SNP_std;
             }
+
             bedData.insert(pair<string, vector<double>>(SNP_buf, single_SNP_temp));
         } else {
             LOGGER.w(0, "all values are NA for SNP " + SNP_buf + " in bedfile " + bedFile);
