@@ -14,6 +14,8 @@
 #include <Eigen/Sparse>
 #include <unsupported/Eigen/SpecialFunctions>
 #include <iomanip>
+#include <time.h>
+#include <numeric>
 
 using namespace Eigen;
 
@@ -59,52 +61,53 @@ private: // memory all freed after Step 1
     vector<string> bimSNP1, bimSNP2;
     unordered_set<string> commonSNP;
 
-// Step 2: prepare matrices and vectors for calculation
+// Step 2: main loop
 public:
     void initialize_hyperparameters();
 
-    void initialize_candidate_and_screened_matrices();
-    void calc_colinear_SNP(const ArrayXXd &X, ArrayXXd &X_candidate, ArrayXXd &r);
-    void prepare_sumstat(const ArrayXXd &sumstat, ArrayXXd &sumstat_candidate, ArrayXXd &sumstat_screened);
-    
-    void remove_SNP(ArrayXXd &matrix, int rowToRemove);
-    void remove_max_SNP_from_matrices(bool both_cohorts);
+    void initialize_matrices();
+    void remove_row(ArrayXXd &matrix, int rowToRemove);
+    void remove_column(MatrixXd &matrix, int rowToRemove);
     
     void inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2, 
         const ArrayXd &se2_cohort1, const ArrayXd &se2_cohort2, ArrayXXd &merge);
-    void calc_conditional_effects(const ArrayXXd &r, const ArrayXXd &sumstat_candidate, 
-        const ArrayXXd &sumstat_screened, const MatrixXd &R_inv_pre, ArrayXd &conditional_effect_beta);
-    bool calc_joint_effects(ArrayXXd &sumstat_candidate, const ArrayXXd &sumstat_screened, const ArrayXXd &X, 
-        ArrayXXd &X_candidate, MatrixXd &R_inv_post, double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2);  
+    void calc_conditional_effects(ArrayXd &conditional_beta1, ArrayXd &conditional_beta2);
+    bool calc_joint_effects(const MatrixXd &X_screened, MatrixXd &X_candidate, const ArrayXXd &sumstat_screened, 
+        ArrayXXd &sumstat_candidate, const MatrixXd &R_inv_pre, MatrixXd &R_inv_post, double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2);  
+    void fast_inv(const MatrixXd &R_inv_pre, const VectorXd &new_column, MatrixXd &R_inv_post);
 
-public: // all necessary information and data for calculation
+    void accept_max_SNP_as_candidate(); 
+    void refuse_max_SNP_as_candidate();
+
+public: // all necessary data and results during the loop
     int indi_num1, indi_num2, commonSNP_num, max_SNP_index;
     vector<string> commonSNP_ordered;
     unordered_map<string, ItemBim> bimData;
     
     vector<int> candidate_SNP;
-    set<int> backward_removed_SNP, all_excluded_SNP;
+    set<int> backward_removed_SNP;
     vector<int> screened_SNP_original_indices;
-
-    ArrayXXd X1, X2, X1_candidate, X2_candidate;
-    ArrayXXd r1, r2;
-    MatrixXd R1_inv_pre, R2_inv_pre, R1_inv_post, R2_inv_post;
-    double Vp1, Vp2;
-
-    // col 0:b, 1:se2, 2:p, 3:freq, 4:N, 5:V, 6:D 
+    
+    // bed matrix
+    MatrixXd X1, X2, X1_candidate, X2_candidate, X1_screened, X2_screened;
+    // cols 0:b, 1:se2, 2:p, 3:freq, 4:N, 5:V, 6:D 
     ArrayXXd sumstat1, sumstat2, sumstat1_candidate, sumstat2_candidate, sumstat1_screened, sumstat2_screened;
-
-    // cols 0:b, 1:se2, 2:Zabs, 3:p
+    
+    // merge: 0:b, 1:se2, 2:Zabs, 3:p
     ArrayXXd sumstat_merge, new_model_joint;
 
     // outputted joint vectors
     ArrayXd output_b_cohort1, output_b_cohort2, output_se2_cohort1, output_se2_cohort2;
+    
+    MatrixXd r1, r2;
+    MatrixXd R1_inv_pre, R2_inv_pre, R1_inv_post, R2_inv_post;
+    double Vp1, Vp2;
 
 
 // hyperparameters for users to predefine and adjust
 public: 
     double threshold;
-    double colinearity_threshold, iter_colinearity_threshold;
+    double colinearity_threshold, colinearity_threshold_sqrt, iter_colinearity_threshold;
 
     double R2_incremental_threshold;
     double R2_incremental_threshold_backwards;
