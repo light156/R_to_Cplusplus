@@ -368,8 +368,6 @@ void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, strin
     for (int i = 0; i < commonSNP_num; i++) {
         X1.col(i) = Map<ArrayXd>(bedData1[commonSNP_ordered[i]].data(), indi_num1);
         X2.col(i) = Map<ArrayXd>(bedData2[commonSNP_ordered[i]].data(), indi_num2);
-        // X1.row(i) = Map<ArrayXXd>(bedData1[commonSNP_ordered[i]].data(), 1, indi_num1);
-        // X2.row(i) = Map<ArrayXXd>(bedData2[commonSNP_ordered[i]].data(), 1, indi_num2);
     };
 
     unordered_map<string, vector<double>>().swap(bedData1);

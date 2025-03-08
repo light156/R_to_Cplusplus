@@ -64,16 +64,17 @@ private: // memory all freed after Step 1
 // Step 2: main loop
 public:
     void initialize_hyperparameters();
-
     void initialize_matrices();
-    void remove_row(ArrayXXd &matrix, int rowToRemove);
-    void remove_column(MatrixXd &matrix, int rowToRemove);
+    void initialize_backward_selection();
     
     void inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2, 
         const ArrayXd &se2_cohort1, const ArrayXd &se2_cohort2, ArrayXXd &merge);
     void calc_conditional_effects(ArrayXd &conditional_beta1, ArrayXd &conditional_beta2);
-    bool calc_joint_effects(const MatrixXd &X_screened, MatrixXd &X_candidate, const ArrayXXd &sumstat_screened, 
-        ArrayXXd &sumstat_candidate, const MatrixXd &R_inv_pre, MatrixXd &R_inv_post, double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2);  
+    bool calc_joint_effects(const ArrayXXd &sumstat_candidate, const MatrixXd &R_inv_post, 
+        double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2, bool flag);
+        
+    void remove_row(ArrayXXd &matrix, int rowToRemove);
+    void remove_column(MatrixXd &matrix, int rowToRemove); 
     void fast_inv(const MatrixXd &R_inv_pre, const VectorXd &new_column, MatrixXd &R_inv_post);
 
     void accept_max_SNP_as_candidate(); 
@@ -89,9 +90,10 @@ public: // all necessary data and results during the loop
     vector<int> screened_SNP_original_indices;
     
     // bed matrix
-    MatrixXd X1, X2, X1_candidate, X2_candidate, X1_screened, X2_screened;
+    MatrixXd X1, X2, X1_candidate, X2_candidate, X1_screened, X2_screened, X1_new_model, X2_new_model;
     // cols 0:b, 1:se2, 2:p, 3:freq, 4:N, 5:V, 6:D 
-    ArrayXXd sumstat1, sumstat2, sumstat1_candidate, sumstat2_candidate, sumstat1_screened, sumstat2_screened;
+    ArrayXXd sumstat1, sumstat2, sumstat1_candidate, sumstat2_candidate, 
+        sumstat1_screened, sumstat2_screened, sumstat1_new_model, sumstat2_new_model;
     
     // merge: 0:b, 1:se2, 2:Zabs, 3:p
     ArrayXXd sumstat_merge, new_model_joint;
