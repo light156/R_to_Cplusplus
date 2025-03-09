@@ -5,13 +5,7 @@ int main() {
 
     cout << fixed << setprecision(15) << endl;
 
-    /*
-    clock_t tStart;
-
-    tStart = clock();
-    R_inv_post.noalias() = (X_candidate.matrix() * X_candidate.transpose().matrix()).llt().solve(MatrixXd::Identity(M, M)) * (X_candidate.cols()-1);
-    printf("Time taken: %.5fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
-    */
+    clock_t tStart = clock();
     
     string cojoFile1, cojoFile2, PLINK1, PLINK2;
     /*
@@ -29,6 +23,7 @@ int main() {
     g.initialize_hyperparameters();
     g.read_files(cojoFile1, cojoFile2, PLINK1, PLINK2);
     g.main_loop();
-
+    
+    printf("Time taken: %.5fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
     return 0;
 }

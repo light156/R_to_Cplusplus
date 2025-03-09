@@ -28,6 +28,36 @@ void taCOJO::inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2
 }
 
 
+void taCOJO::add_row(ArrayXXd &matrix, const ArrayXXd &vector, int index=-1)
+{
+    int numRows = matrix.rows(), numCols = matrix.cols();
+    matrix.conservativeResize(numRows+1, NoChange);
+
+    if (index == -1)
+        matrix.row(numRows) = vector;
+}
+
+
+void taCOJO::add_row(MatrixXd &matrix, const MatrixXd &vector, int index=-1)
+{   
+    int numRows = matrix.rows(), numCols = matrix.cols();
+    matrix.conservativeResize(numRows+1, NoChange);
+
+    if (index == -1)
+        matrix.row(numRows) = vector;
+}
+
+
+void taCOJO::add_column(MatrixXd &matrix, const MatrixXd &vector, int index=-1)
+{
+    int numRows = matrix.rows(), numCols = matrix.cols();
+    matrix.conservativeResize(NoChange, numCols+1);
+
+    if (index == -1)
+        matrix.col(numCols) = vector;
+}
+
+
 void taCOJO::remove_row(ArrayXXd &matrix, int index=-1)
 {   
     // -1 indicates the last row
@@ -36,7 +66,19 @@ void taCOJO::remove_row(ArrayXXd &matrix, int index=-1)
     if (index != -1 && index < numRows)
         matrix.block(index, 0, numRows-index, numCols) = matrix.bottomRows(numRows-index);
 
-    matrix.conservativeResize(numRows, numCols);
+    matrix.conservativeResize(numRows, NoChange);
+}
+
+
+void taCOJO::remove_row(MatrixXd &matrix, int index=-1)
+{   
+    // -1 indicates the last row
+    int numRows = matrix.rows()-1, numCols = matrix.cols();
+
+    if (index != -1 && index < numRows)
+        matrix.block(index, 0, numRows-index, numCols) = matrix.bottomRows(numRows-index);
+
+    matrix.conservativeResize(numRows, NoChange);
 }
 
 
@@ -48,65 +90,62 @@ void taCOJO::remove_column(MatrixXd &matrix, int index=-1)
     if (index != -1 && index < numCols)
         matrix.block(0, index, numRows, numCols-index) = matrix.rightCols(numCols-index);
 
-    matrix.conservativeResize(numRows, numCols);
+    matrix.conservativeResize(NoChange, numCols);
 }
 
 
 void taCOJO::initialize_matrices() 
 {   
-    vector<int>().swap(screened_SNP_original_indices);
-    screened_SNP_original_indices.resize(commonSNP_num);
-    iota(screened_SNP_original_indices.begin(), screened_SNP_original_indices.end(), 0);
-
-    int M = candidate_SNP.size(), temp_index;
-
-    sumstat1_candidate.resize(M, sumstat1.cols());
-    sumstat2_candidate.resize(M, sumstat2.cols());
-    X1_candidate.resize(indi_num1, M);
-    X2_candidate.resize(indi_num2, M);
-
-    for (int i = 0; i < M; i++) {
-        temp_index = candidate_SNP[i];
-        sumstat1_candidate.row(i) = sumstat1.row(temp_index);
-        sumstat2_candidate.row(i) = sumstat2.row(temp_index);
-        X1_candidate.col(i) = X1.col(temp_index);
-        X2_candidate.col(i) = X2.col(temp_index);
-    }
+    candidate_SNP.push_back(max_SNP_index);
+    sumstat1_candidate = sumstat1.row(max_SNP_index);
+    sumstat2_candidate = sumstat2.row(max_SNP_index);
+    X1_candidate = X1.col(max_SNP_index);
+    X2_candidate = X2.col(max_SNP_index);
 
     sumstat1_screened = sumstat1;
     sumstat2_screened = sumstat2;
     X1_screened = X1;
     X2_screened = X2;
 
-    auto riter = backward_removed_SNP.rbegin();
-    while (riter != backward_removed_SNP.rend()) {
-        temp_index = *riter;
-        remove_row(sumstat1_screened, temp_index);
-        remove_row(sumstat2_screened, temp_index);
-        remove_column(X1_screened, temp_index);
-        remove_column(X2_screened, temp_index);
-        screened_SNP_original_indices.erase(screened_SNP_original_indices.begin()+temp_index);
-        riter++;
+    r1 = X1_candidate.transpose() * X1_screened / (indi_num1 - 1);
+    r2 = X2_candidate.transpose() * X2_screened / (indi_num2 - 1);
+
+    // remove colinear SNP
+    vector<int> temp_colinear_SNP;
+
+    for (int i = 0, index = 0; i < commonSNP_num; i++) {
+        if (abs(r1(index)) >= colinearity_threshold_sqrt || abs(r2(index)) >= colinearity_threshold_sqrt) {
+            remove_row(sumstat1_screened, index);
+            remove_row(sumstat2_screened, index);
+            remove_column(X1_screened, index);
+            remove_column(X2_screened, index);            
+            remove_column(r1, index);
+            remove_column(r2, index);
+            if (i != max_SNP_index)
+                temp_colinear_SNP.push_back(i);
+        } else {
+            screened_SNP.push_back(i);
+            index++;
+        }
     }
-
-    r1 = X1_candidate.transpose() * X1_screened / (indi_num1-1);
-    r2 = X2_candidate.transpose() * X2_screened / (indi_num2-1);
-
-    // calculate colinear SNP
-    ArrayXd temp1 = r1.cwiseAbs().colwise().maxCoeff(), temp2 = r2.cwiseAbs().colwise().maxCoeff();
-
+    /*
     for (int i = r1.cols()-1; i >= 0; i--) {
-        if (temp1(i) >= colinearity_threshold_sqrt || temp2(i) >= colinearity_threshold_sqrt) {
+        if (abs(r1(i)) >= colinearity_threshold_sqrt || abs(r2(i)) >= colinearity_threshold_sqrt) {
             remove_row(sumstat1_screened, i);
             remove_row(sumstat2_screened, i);
             remove_column(X1_screened, i);
             remove_column(X2_screened, i);            
             remove_column(r1, i);
             remove_column(r2, i);
-            screened_SNP_original_indices.erase(screened_SNP_original_indices.begin()+i);
+            if (i != max_SNP_index)
+                temp_colinear_SNP.push_back(i);
+        } else {
+            screened_SNP.insert(screened_SNP.end(), i);
         }
     }
-}
+    */
+    excluded_SNP.push_back(temp_colinear_SNP);
+}   
 
 
 void taCOJO::calc_conditional_effects(ArrayXd &conditional_beta1, ArrayXd &conditional_beta2) 
@@ -180,21 +219,15 @@ void taCOJO::refuse_max_SNP_as_candidate()
 
 void taCOJO::accept_max_SNP_as_candidate() 
 {       
-    int M = candidate_SNP.size();
-    X1_candidate.conservativeResize(NoChange, M);
-    X2_candidate.conservativeResize(NoChange, M);
-    X1_candidate.col(M-1) = X1_screened.col(max_SNP_index);
-    X2_candidate.col(M-1) = X2_screened.col(max_SNP_index);
-
     MatrixXd r1_temp_vec = X1_screened.col(max_SNP_index).transpose() * X1_screened / (indi_num1 - 1); 
     MatrixXd r2_temp_vec = X2_screened.col(max_SNP_index).transpose() * X2_screened / (indi_num2 - 1); 
     
-    r1.conservativeResize(M, NoChange);
-    r2.conservativeResize(M, NoChange);
-    r1.row(M-1) = r1_temp_vec;
-    r2.row(M-1) = r2_temp_vec;
+    add_row(r1, r1_temp_vec);
+    add_row(r2, r2_temp_vec);
+
+    // remove colinear SNP
+    vector<int> temp_colinear_SNP;
     
-    // calculate colinear SNP
     for (int i = r1.cols()-1; i >= 0; i--) {
         if (abs(r1_temp_vec(i)) >= colinearity_threshold_sqrt || abs(r2_temp_vec(i)) >= colinearity_threshold_sqrt) {
             remove_row(sumstat1_screened, i);
@@ -203,25 +236,41 @@ void taCOJO::accept_max_SNP_as_candidate()
             remove_column(r2, i);
             remove_column(X1_screened, i);
             remove_column(X2_screened, i);
-            screened_SNP_original_indices.erase(screened_SNP_original_indices.begin()+i);
+            if (i != max_SNP_index)
+                temp_colinear_SNP.push_back(screened_SNP[i]);
+            screened_SNP.erase(screened_SNP.begin()+i);
         }
     }
+
+    /*
+    auto iter = screened_SNP.begin();
+
+    for (int i = r1.cols()-1; i >= 0; i--) {
+        if (abs(r1_temp_vec(i)) >= colinearity_threshold_sqrt || abs(r2_temp_vec(i)) >= colinearity_threshold_sqrt) {
+            remove_row(sumstat1_screened, i);
+            remove_row(sumstat2_screened, i);
+            remove_column(r1, i);
+            remove_column(r2, i);
+            remove_column(X1_screened, i);
+            remove_column(X2_screened, i);
+            if (i != max_SNP_index)
+                temp_colinear_SNP.push_back(*iter);
+            iter = screened_SNP.erase(iter);
+        } else iter++;
+    }
+    */
+    excluded_SNP.push_back(temp_colinear_SNP);
 }
 
 
 void taCOJO::initialize_backward_selection() 
 {   
-    int M = candidate_SNP.size()+1;
-
-    X1_new_model.resize(indi_num1, M);
-    X2_new_model.resize(indi_num2, M);
-    X1_new_model << X1_candidate, X1_screened.col(max_SNP_index);
-    X2_new_model << X2_candidate, X2_screened.col(max_SNP_index);
-
     sumstat1_new_model = sumstat1_candidate;
     sumstat2_new_model = sumstat2_candidate;
-
-    for (int i = new_model_joint.rows()-1; i >= 0; i--) {
+    X1_new_model = X1_candidate;
+    X2_new_model = X2_candidate;
+    
+    for (int i = candidate_SNP.size()-1; i >= 0; i--) {
         if (new_model_joint(i, 3) > threshold) {
             remove_row(sumstat1_new_model, i);
             remove_row(sumstat2_new_model, i);
@@ -230,12 +279,55 @@ void taCOJO::initialize_backward_selection()
         }
     }
 
-    R1_inv_post.noalias() = (X1_new_model.transpose() * X1_new_model).inverse() * (indi_num1-1);
-    R2_inv_post.noalias() = (X2_new_model.transpose() * X2_new_model).inverse() * (indi_num2-1);
+    R1_inv_post.noalias() = (X1_new_model.transpose() * X1_new_model).inverse() * (indi_num1 - 1);
+    R2_inv_post.noalias() = (X2_new_model.transpose() * X2_new_model).inverse() * (indi_num2 - 1);
 }
 
 
-void taCOJO::save_file(string bimfile) {
+void taCOJO::adjust_SNPs_according_to_backward_selection() 
+{   
+    return;
+
+    for (int i = candidate_SNP.size()-1; i >= 0; i--) {
+        if (new_model_joint(i, 3) > threshold) {
+            backward_removed_SNP.push_back(candidate_SNP[i]);
+            candidate_SNP.erase(candidate_SNP.begin()+i);
+            remove_row(sumstat1_candidate, i);
+            remove_row(sumstat2_candidate, i);
+            remove_row(r1, i);
+            remove_row(r2, i);
+            remove_column(X1_candidate, i);
+            remove_column(X2_candidate, i);
+        }
+    }
+    
+    MatrixXd X1_excluded(indi_num1, excluded_SNP.size()), X2_excluded(indi_num2, excluded_SNP.size());
+    auto iter = excluded_SNP.begin();
+    
+    /*
+    for (int i = 0; i < excluded_SNP.size(); i++, iter++) {
+        X1_excluded.col(i) = X1.col(*iter);
+        X2_excluded.col(i) = X2.col(*iter);
+    }
+    */ 
+    MatrixXd r1_excluded = X1_candidate.transpose() * X1_excluded / (indi_num1 - 1);
+    MatrixXd r2_excluded = X2_candidate.transpose() * X2_excluded / (indi_num2 - 1);
+    
+    VectorXd r1_temp_vec = r1_excluded.cwiseAbs().rowwise().maxCoeff();
+    VectorXd r2_temp_vec = r2_excluded.cwiseAbs().rowwise().maxCoeff();
+
+    for (int i = candidate_SNP.size()-1; i >= 0; i--) {
+        if (new_model_joint(i, 3) > threshold) {
+            cout << new_model_joint.rows() << " " << i << " " << commonSNP_ordered[candidate_SNP[i]] << endl;
+            // backward_removed_SNP.insert(candidate_SNP[i]);
+            candidate_SNP.erase(candidate_SNP.begin()+i);
+        }
+    }
+}
+
+
+void taCOJO::save_file(string bimfile) 
+{
     ofstream Bim(bimfile.c_str());
     if (!Bim) LOGGER.e(0, "cannot open the file [" + bimfile + "] to write.");
     LOGGER << "Writing PLINK BIM file to [" + bimfile + "] ..." << endl;
@@ -266,12 +358,12 @@ void taCOJO::main_loop()
     if (sumstat_merge(max_SNP_index, 3) > threshold)
         LOGGER.e(0, "Input data has no significant SNPs.");
 
-    candidate_SNP.push_back(max_SNP_index);
     cout << "First SNP: " << commonSNP_ordered[max_SNP_index] << endl;
 
     ArrayXd conditional_beta1, conditional_beta2;
     ArrayXd beta1, beta2, beta_var1, beta_var2;
-    double R2_cohort1, R2_cohort2, previous_R2_cohort1 = 0.0, previous_R2_cohort2 = 0.0;
+    double R2_cohort1, R2_cohort2;
+    double previous_R2_cohort1 = 0.0, previous_R2_cohort2 = 0.0;
 
     bool NA_flag = false, loop_break_indicator = false;
     int iter_num = 0;
@@ -280,6 +372,7 @@ void taCOJO::main_loop()
 
     while (!loop_break_indicator && iter_num<max_iter_num) {
         
+        // calculate conditional effects
         calc_conditional_effects(conditional_beta1, conditional_beta2);
         inverse_var_meta(conditional_beta1, conditional_beta2, sumstat1_screened.col(1), sumstat2_screened.col(1), sumstat_merge);
 
@@ -292,27 +385,26 @@ void taCOJO::main_loop()
                 break;
             }
 
-            string temp_SNP_name = commonSNP_ordered[screened_SNP_original_indices[max_SNP_index]]; 
+            // calculate joint effects
+            int original_index = screened_SNP[max_SNP_index];
+            string temp_SNP_name = commonSNP_ordered[original_index];
             
-            int M = candidate_SNP.size()+1;
-            sumstat1_candidate.conservativeResize(M, NoChange);
-            sumstat2_candidate.conservativeResize(M, NoChange);
-            sumstat1_candidate.row(M-1) = sumstat1_screened.row(max_SNP_index);
-            sumstat2_candidate.row(M-1) = sumstat2_screened.row(max_SNP_index);
+            add_row(sumstat1_candidate, sumstat1_screened.row(max_SNP_index));
+            add_row(sumstat2_candidate, sumstat2_screened.row(max_SNP_index));
         
-            fast_inv(R1_inv_pre, X1_screened.col(max_SNP_index).transpose() * X1_candidate / (indi_num1-1), R1_inv_post);
-            fast_inv(R2_inv_pre, X2_screened.col(max_SNP_index).transpose() * X2_candidate / (indi_num2-1), R2_inv_post);
+            fast_inv(R1_inv_pre, X1_screened.col(max_SNP_index).transpose() * X1_candidate / (indi_num1 - 1), R1_inv_post);
+            fast_inv(R2_inv_pre, X2_screened.col(max_SNP_index).transpose() * X2_candidate / (indi_num2 - 1), R2_inv_post);
             
             NA_flag = calc_joint_effects(sumstat1_candidate, R1_inv_post, Vp1, beta1, beta_var1, R2_cohort1, true);            
             if (NA_flag) {
-                // LOGGER.w(0, "NA produced, potentially due to colinearity", temp_SNP_name);
+                LOGGER.w(0, "NA produced, potentially due to colinearity", temp_SNP_name);
                 refuse_max_SNP_as_candidate();
                 continue;
             }
             
             NA_flag = calc_joint_effects(sumstat2_candidate, R2_inv_post, Vp2, beta2, beta_var2, R2_cohort2, true);
             if (NA_flag) {
-                // LOGGER.w(0, "NA produced, potentially due to colinearity", temp_SNP_name);
+                LOGGER.w(0, "NA produced, potentially due to colinearity", temp_SNP_name);
                 refuse_max_SNP_as_candidate();
                 continue;
             }
@@ -320,18 +412,23 @@ void taCOJO::main_loop()
             inverse_var_meta(beta1, beta2, beta_var1, beta_var2, new_model_joint);
             if ((R2_cohort1 < (1+R2_incremental_threshold)*previous_R2_cohort1) || 
                 (R2_cohort2 < (1+R2_incremental_threshold)*previous_R2_cohort2)) {
-                // LOGGER.w(0, "R2 increment unsatisfactory", temp_SNP_name);
+                LOGGER.w(0, "R2 increment unsatisfactory", temp_SNP_name);
                 refuse_max_SNP_as_candidate();
                 continue;
             }
 
+            candidate_SNP.push_back(original_index);
+            add_column(X1_candidate, X1_screened.col(max_SNP_index));
+            add_column(X2_candidate, X2_screened.col(max_SNP_index));
+
+            // include new candidate SNP
             if (new_model_joint.col(3).maxCoeff() <= threshold) {
                 LOGGER.i(0, "All checks passed in this iteration", temp_SNP_name);
-                candidate_SNP.push_back(screened_SNP_original_indices[max_SNP_index]);
                 accept_max_SNP_as_candidate();
 
                 // cout << "Added R vector cohort 1: " << r1.row(max_SNP_index) << endl;
                 // cout << "Added R vector cohort 2: " << r2.row(max_SNP_index) << endl;
+                int M = candidate_SNP.size();
                 cout << "Added diagnoal value cohort 1: " << R1_inv_post(M-1, M-1) << endl;
                 cout << "Added diagnoal value cohort 2: " << R2_inv_post(M-1, M-1) << endl;
                 cout << "Joint b: " << new_model_joint(M-1, 0) << endl;
@@ -342,96 +439,31 @@ void taCOJO::main_loop()
                 break; 
             }
 
-            LOGGER.w(0, "Backward selection", temp_SNP_name);
-            clock_t tStart = clock();
+            // backward selection
             initialize_backward_selection();
             calc_joint_effects(sumstat1_new_model, R1_inv_post, Vp1, beta1, beta_var1, R2_cohort1, false);
             calc_joint_effects(sumstat2_new_model, R2_inv_post, Vp2, beta2, beta_var2, R2_cohort2, false);
-            printf("Step 1: Time taken: %.5fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
 
             cout << "Adjusted R2 for cohort 1: " << fixed << R2_cohort1 << endl;
             cout << "Adjusted R2 for cohort 2: " << R2_cohort2 << endl;
 
             if ((R2_cohort1 < (1+R2_incremental_threshold_backwards)*previous_R2_cohort1) || 
                 (R2_cohort2 < (1+R2_incremental_threshold_backwards)*previous_R2_cohort2)) {
-                LOGGER.d(0, "Adjusted R2 lower than backward selection threshold", temp_SNP_name);
+                LOGGER.w(0, "Backward selection, adjusted R2 lower than threshold", temp_SNP_name);
+                candidate_SNP.pop_back();
+                remove_column(X1_candidate);
+                remove_column(X2_candidate);            
                 refuse_max_SNP_as_candidate();
                 continue;
             }  
             
-            LOGGER.i(0, "Backward selection complete", temp_SNP_name);
-            candidate_SNP.push_back(screened_SNP_original_indices[max_SNP_index]);
-
-            // move bad candidate SNPs into backward removed SNP list
-            for (int i = candidate_SNP.size()-1; i >= 0; i--) {
-                if (new_model_joint(i, 3) > threshold) {
-                    cout << new_model_joint.rows() << " " << i << " " << commonSNP_ordered[candidate_SNP[i]] << endl;
-                    backward_removed_SNP.insert(candidate_SNP[i]);
-                    candidate_SNP.erase(candidate_SNP.begin()+i);
-                }
-            }
-
-            tStart = clock();
-            vector<int>().swap(screened_SNP_original_indices);
-            screened_SNP_original_indices.resize(commonSNP_num);
-            iota(screened_SNP_original_indices.begin(), screened_SNP_original_indices.end(), 0);
-
-            M = candidate_SNP.size();
-            int temp_index;
-
-            sumstat1_candidate.resize(M, sumstat1.cols());
-            sumstat2_candidate.resize(M, sumstat2.cols());
-            X1_candidate.resize(indi_num1, M);
-            X2_candidate.resize(indi_num2, M);
-
-            for (int i = 0; i < M; i++) {
-                temp_index = candidate_SNP[i];
-                sumstat1_candidate.row(i) = sumstat1.row(temp_index);
-                sumstat2_candidate.row(i) = sumstat2.row(temp_index);
-                X1_candidate.col(i) = X1.col(temp_index);
-                X2_candidate.col(i) = X2.col(temp_index);
-            }
-
-            sumstat1_screened = sumstat1;
-            sumstat2_screened = sumstat2;
-            X1_screened = X1;
-            X2_screened = X2;
-
-            auto riter = backward_removed_SNP.rbegin();
-            while (riter != backward_removed_SNP.rend()) {
-                temp_index = *riter;
-                remove_row(sumstat1_screened, temp_index);
-                remove_row(sumstat2_screened, temp_index);
-                remove_column(X1_screened, temp_index);
-                remove_column(X2_screened, temp_index);
-                screened_SNP_original_indices.erase(screened_SNP_original_indices.begin()+temp_index);
-                riter++;
-            }
-
-            r1 = X1_candidate.transpose() * X1_screened / (indi_num1-1);
-            r2 = X2_candidate.transpose() * X2_screened / (indi_num2-1);
-            printf("Step 2: Time taken: %.5fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
-
-            tStart = clock();
-            // calculate colinear SNP
-            ArrayXd temp1 = r1.cwiseAbs().colwise().maxCoeff(), temp2 = r2.cwiseAbs().colwise().maxCoeff();
-
-            for (int i = r1.cols()-1; i >= 0; i--) {
-                if (temp1(i) >= colinearity_threshold_sqrt || temp2(i) >= colinearity_threshold_sqrt) {
-                    remove_row(sumstat1_screened, i);
-                    remove_row(sumstat2_screened, i);
-                    remove_column(X1_screened, i);
-                    remove_column(X2_screened, i);            
-                    remove_column(r1, i);
-                    remove_column(r2, i);
-                    screened_SNP_original_indices.erase(screened_SNP_original_indices.begin()+i);
-                }
-            }
-            printf("Step 3: Time taken: %.5fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
-            exit(-1);
+            LOGGER.d(0, "Backward selection succeeded", temp_SNP_name);
+            return;
+            adjust_SNPs_according_to_backward_selection();
             break;
         }
 
+        // save template model for output
         if (!loop_break_indicator) {
             previous_R2_cohort1 = R2_cohort1;
             previous_R2_cohort2 = R2_cohort2;
@@ -447,6 +479,7 @@ void taCOJO::main_loop()
         cout << "iter " << ++iter_num << " finished" << endl;
         cout << "--------------------------------" << endl;
     }
+
 
     inverse_var_meta(output_b_cohort1, output_b_cohort2, output_se2_cohort1, output_se2_cohort2, sumstat_merge);
     cout << "bJ.ma: " << sumstat_merge.col(0).transpose() << endl;

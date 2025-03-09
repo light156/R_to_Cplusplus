@@ -65,7 +65,6 @@ private: // memory all freed after Step 1
 public:
     void initialize_hyperparameters();
     void initialize_matrices();
-    void initialize_backward_selection();
     
     void inverse_var_meta(const ArrayXd &b_cohort1, const ArrayXd &b_cohort2, 
         const ArrayXd &se2_cohort1, const ArrayXd &se2_cohort2, ArrayXXd &merge);
@@ -73,21 +72,28 @@ public:
     bool calc_joint_effects(const ArrayXXd &sumstat_candidate, const MatrixXd &R_inv_post, 
         double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2, bool flag);
         
-    void remove_row(ArrayXXd &matrix, int rowToRemove);
-    void remove_column(MatrixXd &matrix, int rowToRemove); 
+    void add_row(ArrayXXd &matrix, const ArrayXXd &vector, int index);
+    void add_row(MatrixXd &matrix, const MatrixXd &vector, int index);
+    void add_column(MatrixXd &matrix, const MatrixXd &vector, int index); 
+    void remove_row(ArrayXXd &matrix, int index);
+    void remove_row(MatrixXd &matrix, int index);
+    void remove_column(MatrixXd &matrix, int index); 
     void fast_inv(const MatrixXd &R_inv_pre, const VectorXd &new_column, MatrixXd &R_inv_post);
 
     void accept_max_SNP_as_candidate(); 
     void refuse_max_SNP_as_candidate();
+    
+    void initialize_backward_selection();
+    void adjust_SNPs_according_to_backward_selection();
 
 public: // all necessary data and results during the loop
     int indi_num1, indi_num2, commonSNP_num, max_SNP_index;
     vector<string> commonSNP_ordered;
     unordered_map<string, ItemBim> bimData;
     
-    vector<int> candidate_SNP;
-    set<int> backward_removed_SNP;
-    vector<int> screened_SNP_original_indices;
+    vector<int> candidate_SNP, backward_removed_SNP, screened_SNP;
+    // set<int, greater<int>> screened_SNP;
+    vector<vector<int>> excluded_SNP;
     
     // bed matrix
     MatrixXd X1, X2, X1_candidate, X2_candidate, X1_screened, X2_screened, X1_new_model, X2_new_model;
