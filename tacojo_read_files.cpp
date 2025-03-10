@@ -138,7 +138,6 @@ void taCOJO::read_cojofile(string cojoFile, bool isFirst)
                 }
             }
         }
-
     }
     Meta.close();
     
@@ -148,13 +147,13 @@ void taCOJO::read_cojofile(string cojoFile, bool isFirst)
 }
 
 
-void taCOJO::read_famfile(string famFile, int &indi_num) 
+int taCOJO::read_famfile(string famFile) 
 {
     ifstream Fam(famFile.c_str());
     if (!Fam) LOGGER.e(0, "cannot open the file [" + famFile + "] to read");
     LOGGER << "Reading PLINK FAM file from [" + famFile + "]" << endl;
 
-    indi_num = 0;
+    int indi_num = 0;
     string str_buf1, str_buf2, indi_id_buf;
     unordered_set<string> indi_ids;
 
@@ -177,19 +176,18 @@ void taCOJO::read_famfile(string famFile, int &indi_num)
     Fam.close();
 
     unordered_set<string>().swap(indi_ids);
-    LOGGER << indi_num << " individuals included" << endl;
+    return indi_num;
 }
 
 
 void taCOJO::read_bedfile(string bedFile, int indi_num, bool isFirst, 
     vector<string> &bimSNP, unordered_map<string, vector<double>> &bedData) 
 {       
-    int snp_num = commonSNP.size();
-
     // some code are adopted from PLINK with modifications
     int i, k;
-    bool SNP1, SNP2, flag_all_NA;
+    bool SNP1, SNP2;
     double SNP12, SNP_sum, SNP_square_sum, not_NA_indi_num, SNP_avg, SNP_std;
+    vector<double> single_SNP_temp(indi_num);
     string SNP_buf;
 
     // Read bed file
@@ -208,26 +206,21 @@ void taCOJO::read_bedfile(string bedFile, int indi_num, bool isFirst,
             continue;
         }
         
-        flag_all_NA = true;
         SNP_sum = 0;
         SNP_square_sum = 0;
         not_NA_indi_num = 0;
-        vector<double> single_SNP_temp(indi_num, 0);
 
         // Read genotype in SNP-major mode, 00: homozygote AA; 11: homozygote BB; 01: hetezygote; 10: missing
         for (i = 0; i < indi_num;) {
-
             BIT.read(ch, 1);
             if (!BIT) LOGGER.e(0, "problem with the BED file ... has the FAM/BIM file been changed?");
             b = ch[0];
             k = 0;
-            while (k < 7 && i < indi_num) { // change code: 11 for AA; 00 for BB;
+            while (k < 7 && i < indi_num) {
                 SNP2 = (!b[k++]);
                 SNP1 = (!b[k++]);
-                if (SNP1 && !SNP2) 
-                    single_SNP_temp[i] = 10;
+                if (SNP1 && !SNP2) single_SNP_temp[i] = 10;
                 else {
-                    flag_all_NA = false;
                     SNP12 = SNP1+SNP2;
                     if (!isFirst && bimData[SNP_buf].swap) 
                         SNP12 = 2-SNP12;
@@ -235,36 +228,43 @@ void taCOJO::read_bedfile(string bedFile, int indi_num, bool isFirst,
                     single_SNP_temp[i] = SNP12;
                     SNP_sum += SNP12;
                     SNP_square_sum += SNP12*SNP12;
-                    not_NA_indi_num += 1;
+                    not_NA_indi_num++;
                 }
                 i++;
             }
         }
-        
-        if (!flag_all_NA) {
-            // fill NA with 0
-            SNP_avg = SNP_sum/not_NA_indi_num;
-            SNP_std = sqrt((SNP_square_sum-SNP_avg*SNP_avg*not_NA_indi_num)/(indi_num-1));
-            
-            # pragma omp parallel for 
-            for (i = 0; i < indi_num; i++) {
-                if (single_SNP_temp[i] > 5) 
-                    single_SNP_temp[i] = 0;
-                else
-                    single_SNP_temp[i] = (single_SNP_temp[i]-SNP_avg)/SNP_std;
-            }
 
-            bedData.insert(pair<string, vector<double>>(SNP_buf, single_SNP_temp));
-        } else {
-            LOGGER.w(0, "all values are NA for SNP " + SNP_buf + " in bedfile " + bedFile);
+        if (not_NA_indi_num == 0) {
+            LOGGER.w(1, "all values are NA for SNP " + SNP_buf + " in bedfile " + bedFile);
             commonSNP.erase(SNP_buf);
+            continue;
         }
+
+        SNP_avg = SNP_sum/not_NA_indi_num;
+        SNP_std = sqrt((SNP_square_sum-SNP_avg*SNP_avg*not_NA_indi_num)/(indi_num-1));
+
+        if (SNP_std < 1e-5) {
+            LOGGER.w(1, "all genotypes are identical for SNP " + SNP_buf + " in bedfile " + bedFile);
+            commonSNP.erase(SNP_buf);
+            continue;
+        }
+
+        // fill NA with 0
+        # pragma omp parallel for 
+        for (i = 0; i < indi_num; i++) {
+            if (single_SNP_temp[i] > 5) 
+                single_SNP_temp[i] = 0;
+            else
+                single_SNP_temp[i] = (single_SNP_temp[i]-SNP_avg)/SNP_std;
+        }
+
+        bedData.insert(pair<string, vector<double>>(SNP_buf, single_SNP_temp));
     }
     BIT.clear();
     BIT.close();
 
+    vector<double>().swap(single_SNP_temp);
     vector<string>().swap(bimSNP);
-    LOGGER << "Genotype data for " << indi_num << " individuals and " << snp_num << " SNPs included from [" + bedFile + "]." << endl;
 }
 
 
@@ -330,11 +330,11 @@ void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, strin
     read_cojofile(cojoFile2, false);
     cout << endl;
 
-    read_famfile(PLINK1+".fam", indi_num1);
+    indi_num1 = read_famfile(PLINK1+".fam");
     read_bedfile(PLINK1+".bed", indi_num1, true, bimSNP1, bedData1);
     cout << endl;
 
-    read_famfile(PLINK2+".fam", indi_num2);
+    indi_num2 = read_famfile(PLINK2+".fam");
     read_bedfile(PLINK2+".bed", indi_num2, false, bimSNP2, bedData2);
     cout << endl;
 
@@ -342,8 +342,10 @@ void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, strin
     if (commonSNP_num==0)
         LOGGER.e(0, "Input data has no common SNPs.");
 
-    cout << commonSNP_num << " SNPs included for two cohorts" << endl;
-    
+    LOGGER.i(0, "common SNPs included in Genotype data", to_string(commonSNP_num));
+    LOGGER.i(0, "individuals in Cohort 1", to_string(indi_num1));
+    LOGGER.i(0, "individuals in Cohort 2", to_string(indi_num2));
+
     // clear unrelated SNPs from bim data
     auto iter = bimData.begin();
     while (iter != bimData.end()) {
@@ -376,6 +378,5 @@ void taCOJO::read_files(string cojoFile1, string cojoFile2, string PLINK1, strin
     // initialize sumstat matrices and calculate Vp
     Vp1 = generate_sumstat_matrix(sumstat1, cojoData1);
     Vp2 = generate_sumstat_matrix(sumstat2, cojoData2);
-    
-    cout << Vp1 << " " << Vp2 << endl;
+    cout << "Vp: " << Vp1 << " " << Vp2 << endl << endl;
 }

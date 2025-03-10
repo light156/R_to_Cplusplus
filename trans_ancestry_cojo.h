@@ -4,14 +4,11 @@
 #include "Logger.h"
 #include "StrFunc.h"
 #include <omp.h>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
-#include <map>
 #include <bitset>
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
 #include <unsupported/Eigen/SpecialFunctions>
 #include <iomanip>
 #include <time.h>
@@ -42,18 +39,18 @@ class taCOJO {
 
 public:
     void read_files(string cojoFile1, string cojoFile2, string PLINK1, string PLINK2);
+    void save_results(string filepath);
     void main_loop();
 
 // Step 1: read files and prepare matrices and vectors for calculation
 public:
     void read_cojofile(string cojoFile, bool isFirst);
     void read_bimfile(string bimFile, bool isFirst);
-    void read_famfile(string famFile, int &indi_num);
+    int read_famfile(string famFile);
     void read_bedfile(string bedFile, int indi_num, bool isFirst, 
         vector<string> &bimSNP, unordered_map<string, vector<double>> &bedData);
     double generate_sumstat_matrix(ArrayXXd &sumstat, unordered_map<string, ItemCojo> &cojoData);
     double median(const ArrayXd &vector);
-    void save_file(string filepath); 
 
 private: // memory all freed after Step 1
     unordered_map<string, ItemCojo> cojoData1, cojoData2;    
@@ -72,28 +69,25 @@ public:
     bool calc_joint_effects(const ArrayXXd &sumstat_candidate, const MatrixXd &R_inv_post, 
         double Vp, ArrayXd &beta, ArrayXd &beta_var, double &R2, bool flag);
         
-    void add_row(ArrayXXd &matrix, const ArrayXXd &vector, int index);
-    void add_row(MatrixXd &matrix, const MatrixXd &vector, int index);
-    void add_column(MatrixXd &matrix, const MatrixXd &vector, int index); 
+    void append_row(ArrayXXd &matrix, const ArrayXXd &matrix_new);
+    void append_row(MatrixXd &matrix, const MatrixXd &matrix_new);
+    void append_column(MatrixXd &matrix, const MatrixXd &matrix_new); 
     void remove_row(ArrayXXd &matrix, int index);
     void remove_row(MatrixXd &matrix, int index);
     void remove_column(MatrixXd &matrix, int index); 
     void fast_inv(const MatrixXd &R_inv_pre, const VectorXd &new_column, MatrixXd &R_inv_post);
-
-    void accept_max_SNP_as_candidate(); 
+    
+    void remove_new_colinear_SNP();
     void refuse_max_SNP_as_candidate();
     
     void initialize_backward_selection();
-    void adjust_SNPs_according_to_backward_selection();
+    void adjust_SNP_according_to_backward_selection();
 
 public: // all necessary data and results during the loop
     int indi_num1, indi_num2, commonSNP_num, max_SNP_index;
     vector<string> commonSNP_ordered;
     unordered_map<string, ItemBim> bimData;
-    
-    vector<int> candidate_SNP, backward_removed_SNP, screened_SNP;
-    // set<int, greater<int>> screened_SNP;
-    vector<vector<int>> excluded_SNP;
+    vector<int> candidate_SNP, backward_removed_SNP, screened_SNP, excluded_SNP;
     
     // bed matrix
     MatrixXd X1, X2, X1_candidate, X2_candidate, X1_screened, X2_screened, X1_new_model, X2_new_model;
