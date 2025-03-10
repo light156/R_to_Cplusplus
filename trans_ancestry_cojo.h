@@ -11,7 +11,6 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/SpecialFunctions>
 #include <iomanip>
-#include <time.h>
 #include <numeric>
 
 using namespace Eigen;
