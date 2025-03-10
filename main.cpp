@@ -14,9 +14,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    string cojoFile1 = argv[1], cojoFile2 = argv[2];
-    string PLINK1 = argv[3], PLINK2 = argv[4];
-    string save_path = argv[5];
+    string cojoFile1 = argv[1], cojoFile2 = argv[2], PLINK1 = argv[3], PLINK2 = argv[4], save_path = argv[5];
 
     // cojoFile1 = "Height_AFR_GIANT_QCed_withoutUKB_Chr22.sumstat";
     // cojoFile2 = "Height_EUR_GIANT_QCed_withoutUKB_Chr22.sumstat";
