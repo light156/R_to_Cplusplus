@@ -11,7 +11,7 @@ void taCOJO::initialize_hyperparameters()
     
     R2_incremental_threshold = 0.0;
     R2_incremental_threshold_backwards = -0.5;
-    max_iter_num = 200;  
+    max_iter_num = 10000;  
 }
     
 

@@ -5,7 +5,7 @@
 int main(int argc, char** argv) {
 
     cout << fixed << setprecision(12);
-    
+        
     clock_t tStart = clock();
     
     if (argc != 6) {
